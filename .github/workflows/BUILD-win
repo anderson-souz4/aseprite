@@ -1,0 +1,55 @@
+name: Build Aseprite for Windows
+
+on:
+  workflow_dispatch: # permite executar manualmente
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install Skia
+      shell: bash
+      run: |
+        this_dir=$(cygpath "${{ github.workspace }}")
+        skia_url=$(source $this_dir/laf/misc/skia-url.sh | xargs)
+        skia_file=$(basename $skia_url)
+        curl --ssl-revoke-best-effort -L -o "$skia_file" "$skia_url"
+        unzip "$skia_file" -d skia
+
+    - name: Set up MSVC
+      uses: ilammy/msvc-dev-cmd@v1
+
+    - name: Get Ninja
+      uses: aseprite/get-ninja@main
+
+    - name: Generate Makefiles with CMake
+      shell: bash
+      run: |
+        cmake -S . -B build -G Ninja \
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+          -DLAF_BACKEND=skia \
+          -DENABLE_TESTS=OFF \
+          -DENABLE_SCRIPTING=ON \
+          -DSKIA_DIR=$(realpath skia) \
+          -DSKIA_LIBRARY_DIR=$(realpath skia/out/Release-x64)
+
+    - name: Build Aseprite
+      shell: bash
+      run: |
+        cd build && ninja
+
+    - name: Zip the Aseprite executable
+      run: |
+        Compress-Archive -Path build\bin\aseprite.exe -DestinationPath aseprite-windows.zip
+
+    - name: Upload zipped Aseprite.exe
+      uses: actions/upload-artifact@v3
+      with:
+        name: aseprite-windows
+        path: aseprite-windows.zip
