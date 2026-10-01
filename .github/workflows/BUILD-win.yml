@@ -37,16 +37,28 @@ jobs:
           -DENABLE_TESTS=OFF \
           -DENABLE_SCRIPTING=ON \
           -DSKIA_DIR=$(realpath skia) \
-          -DSKIA_LIBRARY_DIR=$(realpath skia/out/Release-x64)
+          -DSKIA_LIBRARY_DIR=$(realpath skia/out/Release-x64) \
+          -DENABLE_OPENSSL=OFF \
+          -DENABLE_MBEDTLS=OFF \
+          -DENABLE_NETTLE=OFF
 
     - name: Build Aseprite
       shell: bash
       run: |
         cd build && ninja
 
-    - name: Zip the Aseprite executable
+    - name: Check DLL dependencies
+      shell: bash
       run: |
-        Compress-Archive -Path build\bin\aseprite.exe -DestinationPath aseprite-windows.zip
+        dumpbin //dependents build/bin/aseprite.exe
+        if dumpbin //dependents build/bin/aseprite.exe | grep -qi "libcrypto\|libssl"; then
+          echo "aseprite.exe depends on OpenSSL DLLs"; exit 1
+        fi
+
+    - name: Zip Aseprite (exe + data)
+      run: |
+        Remove-Item build\bin\*.pdb, build\bin\*.ilk -ErrorAction SilentlyContinue
+        Compress-Archive -Path build\bin\aseprite.exe, build\bin\data -DestinationPath aseprite-windows.zip
 
     - name: Upload zipped Aseprite.exe
       uses: actions/upload-artifact@v4
